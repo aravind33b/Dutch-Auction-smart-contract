@@ -19,8 +19,10 @@ contract NFTDutchAuction {
     
     uint256 immutable initialBlock;
     uint256 endBlock;
+
     uint256 immutable nfTokenId;
     address immutable tokenAddress;
+    MintNFTokens mint;
 
     constructor(address _tokenAddress, uint256 _nfTokenId, uint256 _reservePrice, uint256 _numBlocksAuctionOpen, uint256 _offerPriceDecrement) {
         tokenAddress = _tokenAddress;
@@ -33,6 +35,8 @@ contract NFTDutchAuction {
         initialPrice = _reservePrice + (_numBlocksAuctionOpen * _offerPriceDecrement);
         initialBlock = block.number;
         endBlock = block.number + numBlockAuctionOpen;
+
+        require(msg.sender == mint.ownerOf(nfTokenId),"jj");
     }
 
     function currentPrice() public view returns(uint256){
@@ -59,6 +63,10 @@ contract NFTDutchAuction {
         seller.transfer(msg.value - refundAmount);
 
         return buyer;
+    }
+
+    function getSellerAddress() public view returns(address){
+        return seller;
     }
 
 }
