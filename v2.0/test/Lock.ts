@@ -3,35 +3,39 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
-describe("BasicDutchAuction", function () {
+describe("testNFTMint", function () {
   async function deployAuctionFixture() {
     
     const [owner, otherAccount] = await ethers.getSigners();
 
-    const basicDutchAuctionFactory = await ethers.getContractFactory("BasicDutchAuction");
-    const basicDutchAuctionToken = await basicDutchAuctionFactory.deploy(100, 10, 10);
+    const nftMintFactory = await ethers.getContractFactory("MintNFT");
+    const nftMintToken = await nftMintFactory.deploy(5);
 
-    return { basicDutchAuctionToken, owner, otherAccount };
+    return { nftMintToken, owner, otherAccount };
   }
 
-  describe("Deployment", function () {
-    it("Get the initial price", async function () {
-      const { basicDutchAuctionToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
+  describe("safeMintNFT", function () {
+    it("Safe Mint - NFT Owner", async function () {
+      const { nftMintToken, owner } = await loadFixture(deployAuctionFixture);
 
-      expect(await basicDutchAuctionToken.currentPrice()).to.equal(200);
+      expect(await nftMintToken.safeMint(owner.address));
     });
 
-    it("Bid from the account which created the contract", async function () {
-      const { basicDutchAuctionToken, owner } = await loadFixture(deployAuctionFixture);
+    it("Safe Mint - Not NFT Owner", async function () {
+      const { nftMintToken, otherAccount } = await loadFixture(deployAuctionFixture);
 
-      expect(basicDutchAuctionToken.connect(owner.address).bid({value:200})).to.be.revertedWith('Sellers are not allowed to buy');
+      expect(nftMintToken.connect(otherAccount).safeMint(otherAccount.address)).eventually.to.rejectedWith('You are not the owner of this NFT');
     });
 
-    it("Bid from buyer account - Equal to the current price", async function () {
-      const { basicDutchAuctionToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
+    it("Successful Mint and deploy auction", async function () {
+      const { nftMintToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
 
-      expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 }));
-    });
+      expect(nftMintToken.safeMint(owner.address));
+
+      const nftDutchAuctionFactory = await ethers.getContractFactory("NFTDutchAuction");
+      const nftDutchAuctionToken = await nftDutchAuctionFactory.deploy(nftMintToken.address, 0, 1000, 10, 5);
+
+    
 
     // it("Bid from buyer account - Greater than the current price", async function () {
     //   const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
@@ -39,69 +43,48 @@ describe("BasicDutchAuction", function () {
     //   expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 400 }));
     // });
 
-    it("Bid from buyer account - Less than the price", async function () {
-      const { basicDutchAuctionToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
+    describe("Bid - before minting contract approval", function () {
+      it("Bid from the account which created the contract", async function () {
+           expect(nftDutchAuctionToken.connect(owner).bid({value:200})).to.be.revertedWith('Sellers are not allowed to buy');
+      });
 
-      expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 20 })).to.be.revertedWith('Insufficient Value');
-    });
-  });
-
-  describe("Auction Conclusion", function () {
-    it("Auction Concluded - bid from another buyer", async function () {
-      const { basicDutchAuctionToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
-
-      basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 });
-      expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 })).to.be.revertedWith('Auction Concluded');
+      it("Bid from an account without approval from Minting Contract", async function () {
+         expect(nftDutchAuctionToken.connect(otherAccount).bid({value:200})).to.be.revertedWith('ERC721: caller is not token owner or approved');
     });
 
-    it("Auction Closed", async function () {
-        const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
-        basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 });
-        
-        expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 })).to.be.revertedWith('Auction Concluded');
+    it("Approving the contract but failure due to token id not existing", async function(){
+         expect(nftMintToken.approve(nftDutchAuctionToken.address, 9)).to.be.revertedWith('ERC721: invalid token ID');
+    });
+
+    it("Approval Failure due to other user access", async function () {
+         expect(nftMintToken.connect(otherAccount).approve(nftDutchAuctionToken.address,0)).to.be.revertedWith('ERC721: approve caller is not token owner or approved for all');
+    });
+    it("Approving", async function () {
+        const approvalResult = await nftMintToken.approve(nftDutchAuctionToken.address, 0);
+        expect( nftMintToken.approve(nftDutchAuctionToken.address,0));
+        describe("Bid after Approval", function () {
+            it("Bid failure due to insufficient funds", async function () {
+                 expect(nftDutchAuctionToken.connect(otherAccount).bid({from: otherAccount.address, value: 100 })).to.be.revertedWith('Insufficient Funds');
+            });
+
+            it("Bid failure due to bid less than reserve price", async function () {
+                 expect(nftDutchAuctionToken.connect(otherAccount).bid({from: otherAccount.address, value: 1 })).to.be.revertedWith('Place a bid greater than reserve price');;
+            });
+
+            it("Bid successful", async function () {
+                 expect(nftDutchAuctionToken.connect(otherAccount).bid({from: otherAccount.address, value: 200 }));
+            });
+
+            it("Bid failure as auction is closed", async function () {
+                expect(nftDutchAuctionToken.connect(otherAccount).bid({from: otherAccount.address, value: 210 })).to.be.revertedWith('Auction is closed');;
+            });
         });
         
-        it("Auction Closed", async function () {
-        const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
-        
-        await time.increase(time.duration.hours(20));
-        expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 })).to.be.revertedWith('Auction Closed');
-        });
-        
-        
-        it("Bid from buyer account - After the auction is closed", async function () {
-        const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
-        
-        await time.increase(time.duration.days(10));
-        
-        expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 400 })).to.be.revertedWith('Auction Closed');
-        });
-        
-        it("Bid from buyer account - After the auction has been concluded", async function () {
-        const { basicDutchAuctionToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
-        
-        basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 400 });
-        
-        expect(basicDutchAuctionToken.connect(owner.address).bid({from: owner.address, value: 400 })).to.be.revertedWith('Auction Concluded');
-        });
-        
-        
-        it("Auction Concluded - Bid from buyer after auction is concluded", async function () {
-        const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
-        
-          // Move time forward to end the auction
-          await time.increase(time.duration.hours(10));
-        
-          expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 })).to.be.revertedWith('Auction Concluded');
-        });
-        
-        it("Auction Closed - Bid from buyer after auction is closed", async function () {
-          const { basicDutchAuctionToken, otherAccount } = await loadFixture(deployAuctionFixture);
-          
-          // Move time forward to end the auction
-          await time.increase(time.duration.hours(20));
-        
-          expect(basicDutchAuctionToken.connect(otherAccount.address).bid({from: otherAccount.address, value: 200 })).to.be.revertedWith('Auction Closed');
-        });
-        });
-  });
+    });
+    expect( nftDutchAuctionToken.currentNFTOwner()).to.equal(otherAccount.address);
+});
+
+});
+
+});
+});
