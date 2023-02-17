@@ -37,9 +37,9 @@ Network Info
 
   testNFTMint
     safeMintNFT
-      ✔ Safe Mint NFT Owner's address (235ms)
+      ✔ Safe Mint NFT Owner's address (150ms)
       ✔ Safe Mint Non NFT Owner's address
-      ✔ Successfully Mint and deploy auction (164ms)
+      ✔ Successfully Mint and deploy auction (49ms)
 
   Bid - before minting contract approval
     ✔ Bid from the account which created the contract
@@ -55,7 +55,7 @@ Network Info
     ✔ Bid failure as auction is closed
 
 
-  12 passing (611ms)
+  12 passing (330ms)
 
 ----------------------|----------|----------|----------|----------|----------------|
 File                  |  % Stmts | % Branch |  % Funcs |  % Lines |Uncovered Lines |
