@@ -10,6 +10,7 @@ interface MintNFTokens{
 contract NFTDutchAuction {
 
     address payable public seller;
+    address public currentOwner;
     address public buyer = address(0x0);
 
     uint256 immutable reservePrice;
@@ -32,11 +33,12 @@ contract NFTDutchAuction {
         numBlockAuctionOpen = _numBlocksAuctionOpen;
         offerPriceDecrement = _offerPriceDecrement;
         seller = payable(msg.sender);
+        currentOwner = seller;
         initialPrice = _reservePrice + (_numBlocksAuctionOpen * _offerPriceDecrement);
         initialBlock = block.number;
         endBlock = block.number + numBlockAuctionOpen;
 
-        require(msg.sender == mint.ownerOf(nfTokenId),"jj");
+        require(msg.sender == mint.ownerOf(nfTokenId),"You're not the owner of this NFT");
     }
 
     function currentPrice() public view returns(uint256){
@@ -62,11 +64,14 @@ contract NFTDutchAuction {
 
         seller.transfer(msg.value - refundAmount);
 
+        currentNFTOwner();
+
         return buyer;
     }
 
-    function getSellerAddress() public view returns(address){
-        return seller;
+    function currentNFTOwner() public returns(address){
+        currentOwner = buyer;
+        return currentOwner;
     }
 
 }
