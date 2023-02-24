@@ -102,7 +102,7 @@ describe("testMint", function () {
                                         });
 
                                         it("Owner gets ERC token", async function () {
-                                          expect(await GCNMintToken.balanceOf(owner.address)).to.equal(ethers.BigNumber.from(130));
+                                          expect(await GCNMintToken.balanceOf(owner.address)).to.equal(await nftDutchAuctionToken.currentPrice());
                                         });
                     
                                         it("Bid failure as auction is closed", async function () {
