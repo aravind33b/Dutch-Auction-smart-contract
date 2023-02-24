@@ -13,6 +13,10 @@ contract Gunnercoin is ERC20 {
         maxGCNSupply = _maxGCNSupply;
     }
 
+    function getMaxGCNSupply() public view returns(uint256){
+        return maxGCNSupply;
+    }
+
     function mint(address to, uint256 amount) public {
         require((currenltyUsed + amount) <= maxGCNSupply, "Maximum amount of GCN minting has exceeded");
         _mint(to, amount);
