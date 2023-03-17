@@ -1,124 +1,220 @@
 import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import '@openzeppelin/hardhat-upgrades';
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
+import { BigNumber, BigNumberish, constants, Signature, Wallet } from "ethers";
+import { splitSignature } from "ethers/lib/utils";
+import { Gunnercoin, Gunnercoin__factory } from '../typechain-types';
+import { token } from "../typechain-types/@openzeppelin/contracts";
 
-describe("Lock", function () {
-  // We define a fixture to reuse the same setup in every test.
-  // We use loadFixture to run this setup once, snapshot that state,
-  // and reset Hardhat Network to that snapshot in every test.
-  async function deployOneYearLockFixture() {
-    const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-    const ONE_GWEI = 1_000_000_000;
+async function getPermitSignature(
+    signer: any, 
+    token: Gunnercoin, 
+    spender: string, 
+    value: any, 
+    deadline: BigNumber) {
+const [nonce, name, version, chainId] = await Promise.all([
+token.nonces(signer.address),
+token.name(),
+"1",
+signer.getChainId(),
+])
 
-    const lockedAmount = ONE_GWEI;
-    const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
+console.log(token.address)
+return ethers.utils.splitSignature(
+    await signer._signTypedData(
+        {
+            name,
+            version,
+            chainId,
+            verifyingContract: token.address,
+        },
+        {
+        Permit: [
+        {
+        name: "owner",
+        type: "address",
+        },
+        {
+        name: "spender",
+        type: "address",
+        },
+        {
+        name: "value",
+        type: "uint256",
+        },
+        {
+        name: "nonce",
+        type: "uint256",
+        },
+        {
+        name: "deadline",
+        type: "uint256",
+        },
+        ],
+        },
+        {
+            owner: signer.address,
+            spender,
+            value,
+            nonce,
+            deadline
+        }
+    )
+)}
 
-    // Contracts are deployed using the first signer/account by default
+describe("testMint", function () {
+  async function deployAuctionFixture() {
+
     const [owner, otherAccount] = await ethers.getSigners();
 
-    const Lock = await ethers.getContractFactory("Lock");
-    const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+    const nftMintFactory = await ethers.getContractFactory("MintNFT");
+    const nftMintToken = await nftMintFactory.deploy(5);
 
-    return { lock, unlockTime, lockedAmount, owner, otherAccount };
+    const GCNMintFactory = await ethers.getContractFactory("Gunnercoin");
+    const GCNMintToken = await GCNMintFactory.deploy(900);
+
+    return { GCNMintToken, nftMintToken, owner, otherAccount };
   }
 
-  describe("Deployment", function () {
-    it("Should set the right unlockTime", async function () {
-      const { lock, unlockTime } = await loadFixture(deployOneYearLockFixture);
+//   describe("Minting", function() {
+    it("Set ERC20 max supply", async function() {
+        const { GCNMintToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
+        const maxGCNSupply = await GCNMintToken.getMaxGCNSupply();
 
-      expect(await lock.unlockTime()).to.equal(unlockTime);
-    });
+        describe("Tests for ERC721 and ERC20", function() {
 
-    it("Should set the right owner", async function () {
-      const { lock, owner } = await loadFixture(deployOneYearLockFixture);
+            it("GCN minting by Owner", async function() {
+                expect(await GCNMintToken.mint(owner.address, 400));
+            });
 
-      expect(await lock.owner()).to.equal(owner.address);
-    });
+            it("GCN minting by other account", async function() {
+                expect(await GCNMintToken.mint(otherAccount.address, 500));
+            });
 
-    it("Should receive and store the funds to lock", async function () {
-      const { lock, lockedAmount } = await loadFixture(
-        deployOneYearLockFixture
-      );
+            it("Max limit reached for GCN Token", async function () {
+              await expect(GCNMintToken.mint(otherAccount.address, 100)).to.be.revertedWith('Maximum amount of GCN minting has exceeded');
+          });
 
-      expect(await ethers.provider.getBalance(lock.address)).to.equal(
-        lockedAmount
-      );
-    });
+            describe("safeMintNFT and deploy Dutch auction", function () {
+                it("Safe Mint NFT Owner's address", async function () {
+                  const { nftMintToken, owner } = await loadFixture(deployAuctionFixture);
+            
+                  expect( nftMintToken.safeMint(owner.address));
+                });
+            
+                it("Safe Mint Non NFT Owner's address", async function () {
+                  const { nftMintToken, otherAccount } = await loadFixture(deployAuctionFixture);
+            
+                  return expect(nftMintToken.connect(otherAccount).safeMint(otherAccount.address)).to.be.revertedWith("Ownable: caller is not the owner");
+                });
 
-    it("Should fail if the unlockTime is not in the future", async function () {
-      // We don't use the fixture here because we want a different deployment
-      const latestTime = await time.latest();
-      const Lock = await ethers.getContractFactory("Lock");
-      await expect(Lock.deploy(latestTime, { value: 1 })).to.be.revertedWith(
-        "Unlock time should be in the future"
-      );
-    });
-  });
+                it("Deploy auction contract", async function() {
+                    const { GCNMintToken, nftMintToken, owner, otherAccount } = await loadFixture(deployAuctionFixture);
+                    expect(nftMintToken.safeMint(owner.address));
 
-  describe("Withdrawals", function () {
-    describe("Validations", function () {
-      it("Should revert with the right error if called too soon", async function () {
-        const { lock } = await loadFixture(deployOneYearLockFixture);
+                    const nftDutchAuctionFactory = await ethers.getContractFactory("NFTDutchAuction");
+                    const nftDutchAuctionToken = await upgrades.deployProxy( nftDutchAuctionFactory,[GCNMintToken.address, nftMintToken.address, 0, 100, 20, 5],
+                        {
+                            kind: "uups",
+                            initializer: "initialize( address, address, uint256, uint256, uint256, uint256)",
+                            timeout: 0
+                        });
+                        await nftDutchAuctionToken.deployed();
 
-        await expect(lock.withdraw()).to.be.revertedWith(
-          "You can't withdraw yet"
-        );
-      });
+                    //expect(await nftDutchAuctionToken.currentNFTOwner()).to.equal(owner.address);
 
-      it("Should revert with the right error if called from another account", async function () {
-        const { lock, unlockTime, otherAccount } = await loadFixture(
-          deployOneYearLockFixture
-        );
+                    describe("Auction bids", function() {
+                        it("Before approving ERC20", async function(){
+                            await expect(nftDutchAuctionToken.connect(otherAccount).bid(400)).to.be.revertedWith('Insufficient Gunnercoin in your account'); 
+                        })
 
-        // We can increase the time in Hardhat Network
-        await time.increaseTo(unlockTime);
+                        it("ERC20 Permit Rejection due to invalid signature", async function(){
+                            const amount = 1000;
+                            const deadline = constants.MaxUint256;
+                            console.log(GCNMintToken.address)
+                            const {v, r, s} = await getPermitSignature(
+                                owner,
+                                GCNMintToken,
+                                nftDutchAuctionToken.address,
+                                amount,
+                                deadline
+                            )
+                            await expect(GCNMintToken.permit(owner.address, nftDutchAuctionToken.address, 200, deadline, v, r, s)).to.be.revertedWith("ERC20Permit: invalid signature");
+                        });
 
-        // We use lock.connect() to send a transaction from another account
-        await expect(lock.connect(otherAccount).withdraw()).to.be.revertedWith(
-          "You aren't the owner"
-        );
-      });
+                        it("Approving ERC20", async function(){
+                            const amount = 800;
+                            const deadline = constants.MaxUint256;
+                            
+                            console.log(GCNMintToken.address)
+                            
+                            const {v, r, s} = await getPermitSignature(
+                                owner,
+                                GCNMintToken,
+                                nftDutchAuctionToken.address,
+                                amount,
+                                deadline
+                            )
+                            await GCNMintToken.permit(owner.address, nftDutchAuctionToken.address, amount, deadline, v, r, s);
+                            
+                            describe("Post Approval Process", function(){
+                                
+                                it("Seller trying to buy before ERC20 approval", async function(){
+                                    GCNMintToken.mint(otherAccount.address, 400);
+                                    await expect(nftDutchAuctionToken.connect(owner).bid(400)).to.be.revertedWith('Sellers are not allowed to buy');
+                                })
 
-      it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
-        const { lock, unlockTime } = await loadFixture(
-          deployOneYearLockFixture
-        );
+                                it("Bid before ERC721 approval", async function(){
+                                    GCNMintToken.mint(otherAccount.address, 400);
+                                    GCNMintToken.connect(otherAccount).approve(nftDutchAuctionToken.address, 400)
+                                    await expect(nftDutchAuctionToken.connect(otherAccount).bid(400)).to.be.revertedWith('ERC721: caller is not token owner or approved');
+                                })
 
-        // Transactions are sent using the first signer by default
-        await time.increaseTo(unlockTime);
+                                it("Approving the contract but failure due to token id not existing", async function(){
+                                    return expect(nftMintToken.approve(nftDutchAuctionToken.address, 9)).to.be.revertedWith('ERC721: invalid token ID');
+                                });
+                            
+                                it("Approval Failure due to other user access", async function () {
+                                    return expect(nftMintToken.connect(otherAccount).approve(nftDutchAuctionToken.address,0)).to.be.revertedWith('ERC721: approve caller is not token owner or approved for all');
+                                });
+                                it("Approving", async function () {
+                                    const approvalResult = await nftMintToken.approve(nftDutchAuctionToken.address, 0);
+                                    expect( nftMintToken.approve(nftDutchAuctionToken.address,1));
+                                    
+                                    describe("Bid after Approval", function () {
+                                        it("Bid failure due to insufficient funds", async function () {
+                                          await expect(nftDutchAuctionToken.connect(otherAccount).bid(50)).to.be.revertedWith('Insufficient Value');
+                                        });
+                    
+                                        it("Bid failure due to less than reserve price", async function () {
+                                            await expect(nftDutchAuctionToken.connect(otherAccount).bid(1)).to.be.revertedWith('Insufficient Value');;
+                                        });
+                    
+                                        it("Successful bid", async function () {
+                                            await expect(nftDutchAuctionToken.connect(otherAccount).bid(400));
+                                        });
 
-        await expect(lock.withdraw()).not.to.be.reverted;
-      });
-    });
+                                        it("Owner gets ERC token", async function () {
+                                          expect(await GCNMintToken.balanceOf(owner.address)).to.equal(await nftDutchAuctionToken.currentPrice());
+                                        });
+                    
+                                        it("Bid failure as auction is closed", async function () {
+                                           await expect(nftDutchAuctionToken.connect(otherAccount).bid(110)).to.be.revertedWith('Auction Concluded');
+                                        });
+                                    });
+                                    
+                                });
 
-    describe("Events", function () {
-      it("Should emit an event on withdrawals", async function () {
-        const { lock, unlockTime, lockedAmount } = await loadFixture(
-          deployOneYearLockFixture
-        );
 
-        await time.increaseTo(unlockTime);
+                            })
+                        });
+                        
+                       
+                    })
+            })
 
-        await expect(lock.withdraw())
-          .to.emit(lock, "Withdrawal")
-          .withArgs(lockedAmount, anyValue); // We accept any value as `when` arg
-      });
-    });
-
-    describe("Transfers", function () {
-      it("Should transfer the funds to the owner", async function () {
-        const { lock, unlockTime, lockedAmount, owner } = await loadFixture(
-          deployOneYearLockFixture
-        );
-
-        await time.increaseTo(unlockTime);
-
-        await expect(lock.withdraw()).to.changeEtherBalances(
-          [owner, lock],
-          [lockedAmount, -lockedAmount]
-        );
-      });
+        })
     });
   });
 });
