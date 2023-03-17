@@ -7,12 +7,7 @@ import { splitSignature } from "ethers/lib/utils";
 import { Gunnercoin, Gunnercoin__factory } from '../typechain-types';
 import { token } from "../typechain-types/@openzeppelin/contracts";
 
-async function getPermitSignature(
-    signer: any, 
-    token: Gunnercoin, 
-    spender: string, 
-    value: any, 
-    deadline: BigNumber) {
+async function getPermitSignature(signer: any, token: Gunnercoin, spender: string, value: any, deadline: BigNumber) {
 const [nonce, name, version, chainId] = await Promise.all([
 token.nonces(signer.address),
 token.name(),
