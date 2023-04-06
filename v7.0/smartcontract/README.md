@@ -1,5 +1,8 @@
 # Sample Hardhat Project
 
+This project runs on the following IPNS:
+ipns://k51qzi5uqu5djaqzr14lk3v2twomh3odmtyc5z3ftivd9l5mbdmmk4ni05bmwz
+
 This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
 
 Try running some of the following tasks:
