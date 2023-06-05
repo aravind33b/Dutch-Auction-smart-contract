@@ -30,7 +30,8 @@ Offchain signing - Implemented Off chain signing to help save gas fees
 UI for BasicDutchAuction -  Designed a simple UI for BasicDutchAuction (Version 1.0) which shows details about current seller's and buyer's wallet addresses and details about auction status.
 
 # Version 7.0:
-UI Deployment - Deployed the above version using IPFS which can be accessed here: 
-ipns:// Ex: ipns://k51qzi5uqu5djaqzr14lk3v2twomh3odmtyc5z3ftivd9l5mbdmmk4ni05bmwz
+UI Deployment - Deployed the above version using IPFS which can be accessed here:
+
+ipns://k51qzi5uqu5djaqzr14lk3v2twomh3odmtyc5z3ftivd9l5mbdmmk4ni05bmwz
 
 If the ipns url above is not working or is throwing 504 timeout error, install ipfs browser extension and try again
