@@ -11,7 +11,7 @@ If successful, the buyer will get the auction item (an NFT in this case) and the
 
 This project was done as part of the INFO 7500 Cryptocurrency and Smart Contract coursework and follows an iterative approach. A brief about all the versions:
 
-##3 Version 1.0:
+### Version 1.0:
 BasicDutchAuction - A basic Dutch Auction contract that allows us users to sell and buy items using bidding.
 
 ### Version 2.0:
